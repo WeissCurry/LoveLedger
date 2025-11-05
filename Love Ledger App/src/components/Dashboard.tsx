@@ -1,10 +1,20 @@
 import { motion } from "motion/react";
-import { ArrowLeft, Heart, AlertTriangle, CheckCircle2, XCircle, Clock } from "lucide-react";
+import {
+  ArrowLeft,
+  Heart,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertCircle,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Badge } from "./ui/badge";
 import { Alert, AlertDescription } from "./ui/alert";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 interface Contract {
   id: string;
@@ -25,15 +35,17 @@ interface Contract {
 }
 
 interface DashboardProps {
-  wallet: string;
+  wallet: `0x${string}`;
   contract: Contract | null;
   onBack: () => void;
-  onPair: () => void;
-  onVerify: () => void;
-  onUnpair: () => void;
+  onPair: () => Promise<void>;
+  onVerify: () => Promise<void>;
+  onUnpair: () => Promise<void>;
 }
 
-export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair }: DashboardProps) {
+export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: DashboardProps) {
+  const { address, isConnected } = useAccount();
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
@@ -65,7 +77,7 @@ export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair
   };
 
   const getDaysRemaining = () => {
-    if (!contract || !contract.duration) return null;
+    if (!contract?.duration) return null;
     const created = new Date(contract.createdAt);
     const duration = parseInt(contract.duration);
     const expiryDate = new Date(created.getTime() + duration * 24 * 60 * 60 * 1000);
@@ -75,7 +87,7 @@ export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair
   };
 
   const getProgressPercentage = () => {
-    if (!contract || !contract.duration) return 0;
+    if (!contract?.duration) return 0;
     const created = new Date(contract.createdAt);
     const duration = parseInt(contract.duration);
     const now = new Date();
@@ -88,26 +100,26 @@ export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair
     if (!contract) return 0;
     const created = new Date(contract.createdAt);
     const now = new Date();
-    const days = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-    return days;
+    return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  const isCreator = contract?.creatorWallet === wallet;
-  const isPartner = contract?.partnerWallet === wallet;
+  // --- derived states ---
+  const isCreator = contract?.creatorWallet === address;
+  const isPartner = contract?.partnerWallet === address;
   const userVerified = isCreator ? contract?.verifiedCreator : contract?.verifiedPartner;
   const partnerVerified = isCreator ? contract?.verifiedPartner : contract?.verifiedCreator;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0F0A1E] via-[#1A1332] to-[#0F0A1E] py-12">
       <div className="container mx-auto px-4">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="mb-8 text-gray-400 hover:text-white"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Home
-        </Button>
+        <div className="flex justify-between mb-8">
+          <Button variant="ghost" onClick={onBack} className="text-gray-400 hover:text-white">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Home
+          </Button>
+
+
+        </div>
 
         <div className="max-w-4xl mx-auto">
           <motion.div
@@ -119,7 +131,16 @@ export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair
             <p className="text-gray-400">Monitor your commitment status</p>
           </motion.div>
 
-          {!contract ? (
+          {!isConnected ? (
+            <Card className="bg-[#2A1E5C]/50 border-[#FF3EA5]/20 p-12 text-center">
+              <Heart className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+              <h2 className="text-xl mb-2 text-gray-400">No Wallet Connected</h2>
+              <p className="text-gray-500 mb-6">
+                Connect your wallet to view your contracts.
+              </p>
+              <ConnectButton />
+            </Card>
+          ) : !contract ? (
             <Card className="bg-[#2A1E5C]/50 border-[#FF3EA5]/20 p-12 text-center">
               <Heart className="w-16 h-16 text-gray-500 mx-auto mb-4" />
               <h2 className="text-xl mb-2 text-gray-400">No Active Contract</h2>
@@ -147,7 +168,7 @@ export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-3xl text-[#FFD465]">{contract.amount} MATIC</div>
+                    <div className="text-3xl text-[#FFD465]">{contract.amount} ETH</div>
                     <div className="text-sm text-gray-400">Locked Fund</div>
                   </div>
                 </div>
@@ -292,7 +313,7 @@ export function Dashboard({ wallet, contract, onBack, onPair, onVerify, onUnpair
                     <h2 className="text-3xl mb-3 text-[#FFD465]">Congratulations!</h2>
                     <p className="text-lg mb-4">You are now verified on-chain!</p>
                     <p className="text-gray-400 mb-6">
-                      Love Fund has been released ({parseFloat(contract.amount) / 2} MATIC each) and Love Proof NFTs have been minted to both wallets.
+                      Love Fund has been released ({parseFloat(contract.amount) / 2} ETH each) and Love Proof NFTs have been minted to both wallets.
                     </p>
                     <Badge className="bg-[#FFD465] text-[#0F0A1E]">
                       Verified on {new Date(contract.verifiedAt!).toLocaleDateString()}

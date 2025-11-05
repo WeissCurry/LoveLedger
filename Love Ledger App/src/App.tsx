@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { toast, Toaster } from "sonner@2.0.3";
+import { toast, Toaster } from "sonner";
+import { useAccount } from "wagmi";
 import { WalletConnect } from "./components/WalletConnect";
 import { LandingPage } from "./components/LandingPage";
 import { CreateContract } from "./components/CreateContract";
@@ -37,7 +38,8 @@ interface Stats {
 const SERVER_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c17b8718`;
 
 export default function App() {
-  const [wallet, setWallet] = useState<string | null>(null);
+  const { address: wallet, isConnected } = useAccount();
+
   const [view, setView] = useState<View>("landing");
   const [contract, setContract] = useState<Contract | null>(null);
   const [stats, setStats] = useState<Stats>({
@@ -48,24 +50,6 @@ export default function App() {
   });
   const [loading, setLoading] = useState(false);
 
-  // Mock wallet connection
-  const connectWallet = () => {
-    const mockWallet = `0x${Math.random().toString(16).slice(2, 42)}`;
-    setWallet(mockWallet);
-    toast.success("💘 Wallet Connected", {
-      description: `Connected: ${mockWallet.slice(0, 10)}...`,
-    });
-    fetchContract(mockWallet);
-  };
-
-  const disconnectWallet = () => {
-    setWallet(null);
-    setContract(null);
-    setView("landing");
-    toast.success("Wallet Disconnected");
-  };
-
-  // Fetch global stats
   const fetchStats = async () => {
     try {
       const response = await fetch(`${SERVER_URL}/stats`, {
@@ -74,15 +58,12 @@ export default function App() {
         },
       });
       const data = await response.json();
-      if (data.success) {
-        setStats(data.stats);
-      }
+      if (data.success) setStats(data.stats);
     } catch (error) {
       console.error("Error fetching stats:", error);
     }
   };
 
-  // Fetch contract for wallet
   const fetchContract = async (walletAddress: string) => {
     try {
       const response = await fetch(`${SERVER_URL}/contracts/wallet/${walletAddress}`, {
@@ -91,21 +72,22 @@ export default function App() {
         },
       });
       const data = await response.json();
-      if (data.success && data.contract) {
-        setContract(data.contract);
-      }
+      if (data.success && data.contract) setContract(data.contract);
     } catch (error) {
       console.error("Error fetching contract:", error);
     }
   };
 
-  // Create contract
+  // ========================
+  // 💞 Contract Actions
+  // ========================
+
   const createContract = async (formData: ContractData) => {
-    if (!wallet) return;
+    if (!wallet) return toast.error("Please connect your wallet first");
 
     setLoading(true);
     try {
-      const response = await fetch(`${SERVER_URL}/contracts/create`, {
+      const res = await fetch(`${SERVER_URL}/contracts/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -113,15 +95,12 @@ export default function App() {
         },
         body: JSON.stringify({
           creatorWallet: wallet,
-          partnerWallet: formData.partnerWallet,
-          amount: formData.amount,
-          duration: formData.duration,
-          refundOption: formData.refundOption,
+          ...formData,
         }),
       });
 
-      const data = await response.json();
-      
+      const data = await res.json();
+
       if (data.success) {
         setContract(data.contract);
         setView("dashboard");
@@ -135,22 +114,18 @@ export default function App() {
         });
       }
     } catch (error) {
-      console.error("Error creating contract:", error);
-      toast.error("Error creating contract", {
-        description: String(error),
-      });
+      toast.error("Error creating contract", { description: String(error) });
     } finally {
       setLoading(false);
     }
   };
 
-  // Pair wallet
   const pairWallet = async () => {
     if (!wallet || !contract) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${SERVER_URL}/contracts/pair`, {
+      const res = await fetch(`${SERVER_URL}/contracts/pair`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -162,8 +137,7 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
-      
+      const data = await res.json();
       if (data.success) {
         setContract(data.contract);
         toast.success("💘 Wallets Paired!", {
@@ -176,22 +150,18 @@ export default function App() {
         });
       }
     } catch (error) {
-      console.error("Error pairing wallet:", error);
-      toast.error("Error pairing wallet", {
-        description: String(error),
-      });
+      toast.error("Error pairing wallet", { description: String(error) });
     } finally {
       setLoading(false);
     }
   };
 
-  // Verify marriage
   const verifyMarriage = async () => {
     if (!wallet || !contract) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${SERVER_URL}/contracts/verify`, {
+      const res = await fetch(`${SERVER_URL}/contracts/verify`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -203,11 +173,10 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
-      
+      const data = await res.json();
+
       if (data.success) {
         setContract(data.contract);
-        
         if (data.bothVerified) {
           toast.success("💍 Marriage Verified!", {
             description: "Love Fund released and NFT minted.",
@@ -224,27 +193,20 @@ export default function App() {
         });
       }
     } catch (error) {
-      console.error("Error verifying marriage:", error);
-      toast.error("Error verifying marriage", {
-        description: String(error),
-      });
+      toast.error("Error verifying marriage", { description: String(error) });
     } finally {
       setLoading(false);
     }
   };
 
-  // Unpair contract
   const unpairContract = async () => {
     if (!wallet || !contract) return;
-
-    const confirmed = confirm(
-      "Are you sure you want to terminate this contract? This action cannot be undone."
-    );
+    const confirmed = confirm("Are you sure you want to terminate this contract?");
     if (!confirmed) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${SERVER_URL}/contracts/unpair`, {
+      const res = await fetch(`${SERVER_URL}/contracts/unpair`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -256,12 +218,12 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
-      
+      const data = await res.json();
+
       if (data.success) {
         setContract(data.contract);
         toast.error("💔 Contract Terminated", {
-          description: "Contract has been terminated by one party.",
+          description: "Contract has been terminated.",
         });
         fetchStats();
       } else {
@@ -270,31 +232,25 @@ export default function App() {
         });
       }
     } catch (error) {
-      console.error("Error terminating contract:", error);
-      toast.error("Error terminating contract", {
-        description: String(error),
-      });
+      toast.error("Error terminating contract", { description: String(error) });
     } finally {
       setLoading(false);
     }
   };
 
-  // Load stats on mount
   useEffect(() => {
     fetchStats();
   }, []);
 
-  // Refresh contract when wallet changes
   useEffect(() => {
-    if (wallet) {
-      fetchContract(wallet);
-    }
+    if (wallet) fetchContract(wallet);
   }, [wallet]);
+
 
   return (
     <div className="min-h-screen">
       <Toaster position="top-right" theme="dark" />
-      
+
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-[#0F0A1E]/80 backdrop-blur-lg border-b border-[#FF3EA5]/20">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -307,11 +263,9 @@ export default function App() {
               LOVE LEDGER
             </span>
           </div>
-          <WalletConnect
-            wallet={wallet}
-            onConnect={connectWallet}
-            onDisconnect={disconnectWallet}
-          />
+
+          {/* ✅ RainbowKit ConnectButton */}
+          <WalletConnect />
         </div>
       </header>
 
@@ -319,20 +273,12 @@ export default function App() {
       <main className="pt-20">
         {view === "landing" && (
           <LandingPage
-            onCreateContract={() => {
-              if (!wallet) {
-                toast.error("Please connect your wallet first");
-                return;
-              }
-              setView("create");
-            }}
-            onViewDashboard={() => {
-              if (!wallet) {
-                toast.error("Please connect your wallet first");
-                return;
-              }
-              setView("dashboard");
-            }}
+            onCreateContract={() =>
+              isConnected ? setView("create") : toast.error("Please connect your wallet first")
+            }
+            onViewDashboard={() =>
+              isConnected ? setView("dashboard") : toast.error("Please connect your wallet first")
+            }
             stats={stats}
           />
         )}

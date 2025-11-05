@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Lock, AlertCircle } from "lucide-react";
+import { ArrowLeft, Lock, AlertCircle, Copy } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
@@ -28,6 +28,20 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
     duration: "",
     refundOption: "refund",
   });
+
+  const [copied, setCopied] = useState(false);
+
+  const shortWallet = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(wallet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      console.error("Failed to copy wallet address");
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,8 +77,16 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
               {/* Your Wallet */}
               <div>
                 <Label>Your Wallet (Contract Creator)</Label>
-                <div className="mt-2 px-4 py-3 bg-[#1A1332] rounded-lg border border-[#FF3EA5]/20">
-                  <span className="text-sm text-gray-400">{wallet}</span>
+                <div className="mt-2 flex items-center justify-between px-4 py-3 bg-[#1A1332] rounded-lg border border-[#FF3EA5]/20">
+                  <span className="text-sm text-gray-400">{shortWallet}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="text-xs flex items-center gap-1 text-[#FF3EA5] hover:text-[#FFD465] transition"
+                  >
+                    <Copy className="w-4 h-4" />
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
                 </div>
               </div>
 
@@ -85,7 +107,7 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
 
               {/* Love Fund Amount */}
               <div>
-                <Label htmlFor="amount">Love Fund Amount (MATIC)</Label>
+                <Label htmlFor="amount">Love Fund Amount (ETH)</Label>
                 <div className="relative mt-2">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#FF3EA5]" />
                   <Input
@@ -109,7 +131,7 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
               {/* Contract Duration */}
               <div>
                 <Label htmlFor="duration">
-                  Contract Duration (Days) 
+                  Contract Duration (Days)
                   <span className="text-[#FFD465] ml-2">- Optional</span>
                 </Label>
                 <Input
@@ -134,8 +156,8 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
                 <Label>If One Partner Unpairs Before Verification</Label>
                 <RadioGroup
                   value={formData.refundOption}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, refundOption: value as "burn" | "refund" })
+                  onValueChange={(value: "burn" | "refund") =>
+                    setFormData({ ...formData, refundOption: value })
                   }
                   className="mt-3 space-y-3"
                 >
@@ -182,19 +204,6 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
               </Button>
             </form>
           </Card>
-
-          {/* Info Box */}
-          <div className="mt-6 p-6 bg-[#2A1E5C]/30 border border-[#FF3EA5]/20 rounded-lg">
-            <h3 className="mb-3 text-[#FFD465]">What Happens Next?</h3>
-            <ol className="space-y-2 text-sm text-gray-400">
-              <li>1. Your Love Fund will be locked in the smart contract escrow vault</li>
-              <li>2. Your partner will receive a pairing request to their wallet</li>
-              <li>3. Once paired, contract status changes to "Active Relationship"</li>
-              <li>4. Contract tetap aktif tanpa batas waktu (kecuali durasi ditentukan)</li>
-              <li>5. When ready to marry, both wallets must verify independently</li>
-              <li>6. After mutual verification, Love NFT mints and funds release 50/50</li>
-            </ol>
-          </div>
         </motion.div>
       </div>
     </div>

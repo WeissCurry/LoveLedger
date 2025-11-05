@@ -29,20 +29,21 @@ export function LandingPage({ onCreateContract, onViewDashboard, stats }: Landin
             <Heart className="w-4 h-4 text-[#FF3EA5]" />
             <span className="text-sm text-[#FF3EA5]">Blockchain Proof of Relationship Commitment</span>
           </div>
-          
+
           <h1 className="text-6xl mb-6 bg-gradient-to-r from-[#FF3EA5] via-[#FFD465] to-[#FF3EA5] bg-clip-text text-transparent">
             LOVE LEDGER
           </h1>
-          
+
           <p className="text-2xl mb-4 text-gray-300">
             Because real love deserves verification.
           </p>
-          
+
           <p className="text-lg mb-12 text-gray-400 max-w-2xl mx-auto">
             Lock your love. Prove your future. A Web3 platform for couples to create smart contract commitments towards marriage, secured on blockchain.
           </p>
 
-          <div className="flex gap-4 justify-center mb-16">
+          <div className="flex gap-4 justify-center mb-16 px-4 lg:flex-row">
+
             <Button
               onClick={onCreateContract}
               size="lg"
@@ -50,6 +51,8 @@ export function LandingPage({ onCreateContract, onViewDashboard, stats }: Landin
             >
               Create Love Contract
             </Button>
+
+
             <Button
               onClick={onViewDashboard}
               size="lg"
@@ -58,6 +61,7 @@ export function LandingPage({ onCreateContract, onViewDashboard, stats }: Landin
             >
               View Dashboard
             </Button>
+
           </div>
 
           {/* Stats */}
@@ -76,7 +80,7 @@ export function LandingPage({ onCreateContract, onViewDashboard, stats }: Landin
             </Card>
             <Card className="bg-[#2A1E5C]/50 border-[#FF3EA5]/20 p-6">
               <div className="text-3xl text-[#FFD465] mb-2">{stats.totalLocked.toFixed(0)}</div>
-              <div className="text-sm text-gray-400">MATIC Locked</div>
+              <div className="text-sm text-gray-400">ETH Locked</div>
             </Card>
           </div>
         </motion.div>
@@ -85,7 +89,7 @@ export function LandingPage({ onCreateContract, onViewDashboard, stats }: Landin
       {/* Features */}
       <div className="container mx-auto px-4 py-20">
         <h2 className="text-3xl text-center mb-12 text-[#FF3EA5]">How It Works</h2>
-        
+
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
