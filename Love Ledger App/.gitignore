@@ -1,0 +1,39 @@
+# Node modules
+node_modules/
+
+# Build output
+/dist/
+/build/
+
+# Vite specific
+.vite/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE specific
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# npm debug log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js generated files (optional, if using Next.js in the future)
+.next/
+
+# TypeScript compiled output (if using TypeScript)
+*.tsbuildinfo
+
+# Other common files to ignore
+*.tgz
