@@ -7,6 +7,7 @@ node_modules/
 
 # Vite specific
 .vite/
+.DS_Store
 
 # Logs
 *.log
