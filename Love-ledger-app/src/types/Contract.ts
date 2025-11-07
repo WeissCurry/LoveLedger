@@ -2,6 +2,7 @@ export type ContractStatus = "Dating" | "BrokeUp" | "Married";
 
 export interface Contract {
     id: string;
+    tokenId?: string;
     creatorWallet: string;
     partnerWallet: string;
     amount: string;

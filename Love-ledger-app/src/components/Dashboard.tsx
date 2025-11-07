@@ -7,6 +7,7 @@ import {
   XCircle,
   Clock,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -16,6 +17,9 @@ import { Alert, AlertDescription } from "./ui/alert";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import type { Contract } from "../types/Contract";
+import { useContractStatus } from "../hooks/useContractStatus";
+import { useWriteContract } from "wagmi";
+import { LOVE_NFT_ADDRESS, LOVE_NFT_ABI } from "../lib/loveNftContract";
 
 interface DashboardProps {
   wallet: `0x${string}`;
@@ -28,6 +32,36 @@ interface DashboardProps {
 
 export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: DashboardProps) {
   const { address, isConnected } = useAccount();
+
+  const { writeContract, isPending: isMinting } = useWriteContract();
+
+  const handleMintNFT = async () => {
+    try {
+      await writeContract({
+        address: LOVE_NFT_ADDRESS,
+        abi: LOVE_NFT_ABI,
+        functionName: "mint",
+        args: [address],
+      });
+      alert("You are about to mint nft!");
+    } catch (err) {
+      alert("Mint failed!");
+    }
+  };
+
+  
+  // Get status from blockchain
+  const { 
+    onChainStatus, 
+    hasRelationship, 
+    tokenId, 
+    relationshipData,
+    refetchStatus,
+    isLoading: statusLoading 
+  } = useContractStatus(contract?.partnerWallet);
+
+  // Use on-chain status if available, fallback to contract status
+  const displayStatus = onChainStatus || contract?.status || "Dating";
 
   // 🩷 --- STATUS STYLE MAPPING SESUAI SC ---
   const getStatusColor = (status: string) => {
@@ -83,7 +117,7 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
             className="text-center mb-8"
           >
             <h1 className="text-4xl mb-3 text-[#FF3EA5]">Love Contract Dashboard</h1>
-            <p className="text-gray-400">Monitor your commitment status</p>
+            <p className="text-gray-400">Monitor your commitment status on-chain</p>
           </motion.div>
 
           {!isConnected ? (
@@ -110,22 +144,49 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
             <div className="space-y-6">
               {/* STATUS CARD */}
               <Card className="bg-[#2A1E5C]/50 border-[#FF3EA5]/20 p-8">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <div className={`p-3 rounded-full ${getStatusColor(contract.status)}/20`}>
-                      {getStatusIcon(contract.status)}
+                    <div className={`p-3 rounded-full ${getStatusColor(displayStatus)}/20`}>
+                      {getStatusIcon(displayStatus)}
                     </div>
                     <div>
                       <h2 className="text-2xl">Contract Status</h2>
-                      <Badge className={`${getStatusColor(contract.status)} mt-1`}>
-                        {contract.status.toUpperCase()}
-                      </Badge>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge className={`${getStatusColor(displayStatus)}`}>
+                          {displayStatus.toUpperCase()}
+                        </Badge>
+                        {statusLoading && (
+                          <span className="text-xs text-gray-500">Loading on-chain data...</span>
+                        )}
+                        {onChainStatus && (
+                          <span className="text-xs text-green-400 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            On-Chain
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl text-[#FFD465]">{contract.amount} ETH</div>
                     <div className="text-sm text-gray-400">Locked Fund</div>
+                    {tokenId && (
+                      <div className="text-xs text-gray-500 mt-1">Token ID: {tokenId.toString()}</div>
+                    )}
                   </div>
+                </div>
+
+                {/* Refresh Button */}
+                <div className="flex justify-end mb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchStatus()}
+                    className="text-xs"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    Refresh Status
+                  </Button>
                 </div>
 
                 {/* INFO DASAR */}
@@ -146,22 +207,32 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                   </div>
                 </div>
 
-                <div className="text-xs text-gray-500">
-                  Created: {new Date(contract.createdAt).toLocaleDateString()}
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>
+                    Created: {new Date(contract.createdAt).toLocaleDateString()}
+                  </span>
+                  <Button
+                    size="sm"
+                    className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
+                    onClick={handleMintNFT}
+                    disabled={isMinting}
+                  >
+                    Mint NFT
+                  </Button>
                 </div>
               </Card>
 
               {/* STATUS DETAIL */}
-              {contract.status === "Dating" && (
+              {displayStatus === "Dating" && (
                 <Alert className="bg-pink-500/10 border-pink-500/30">
                   <Heart className="h-4 w-4 text-pink-400" />
                   <AlertDescription className="text-sm text-gray-300">
-                    💞 You’re currently dating! Ready to take it to the next level?
+                    💞 You're currently dating! Ready to take it to the next level?
                   </AlertDescription>
                 </Alert>
               )}
 
-              {contract.status === "Married" && (
+              {displayStatus === "Married" && (
                 <motion.div
                   initial={{ scale: 0.95, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -169,7 +240,7 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                   <Card className="bg-gradient-to-br from-yellow-400/20 to-pink-500/20 border-yellow-400 p-8 text-center">
                     <div className="mb-4 text-6xl">💍</div>
                     <h2 className="text-3xl mb-3 text-yellow-400">Congratulations!</h2>
-                    <p className="text-lg mb-4">You’re officially married on-chain!</p>
+                    <p className="text-lg mb-4">You're officially married on-chain!</p>
                     <p className="text-gray-400 mb-6">
                       Love Fund is now eligible for withdrawal by the depositor.
                     </p>
@@ -177,7 +248,7 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                 </motion.div>
               )}
 
-              {contract.status === "BrokeUp" && (
+              {displayStatus === "BrokeUp" && (
                 <Card className="bg-red-500/10 border-red-500/30 p-8 text-center">
                   <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
                   <h2 className="text-2xl mb-3 text-red-400">Relationship Ended 💔</h2>
@@ -193,3 +264,8 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
     </div>
   );
 }
+
+<div className="hidden">
+  bg-pink-500 bg-yellow-400 bg-red-500 bg-gray-500
+  bg-pink-500/10 bg-pink-500/30 bg-yellow-400/20 bg-red-500/10 bg-red-500/30
+</div>

@@ -1,5 +1,4 @@
-// src/components/CreateContract.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, Lock, AlertCircle, Copy } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -12,8 +11,9 @@ import {
   useAccount,
   useWriteContract,
   useWaitForTransactionReceipt,
+  usePublicClient,
 } from "wagmi";
-import { isAddress, parseEther } from "viem";
+import { isAddress, parseEther, decodeEventLog } from "viem";
 import { LOVE_LEDGER_ABI, CONTRACT_ADDRESS } from "../lib/contract";
 
 interface CreateContractProps {
@@ -24,11 +24,13 @@ interface CreateContractProps {
     amount: string;
     duration: string;
     refundOption: "refund" | "burn";
+    tokenId?: string;
   }) => void;
 }
 
 export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps) {
   const { isConnected } = useAccount();
+  const publicClient = usePublicClient();
   const [formData, setFormData] = useState({
     partnerWallet: "",
     amount: "",
@@ -58,6 +60,47 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
+  // 🔥 Extract tokenId from transaction receipt
+  useEffect(() => {
+    const extractTokenId = async () => {
+      if (isSuccess && txHash && publicClient) {
+        try {
+          const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+          
+          // Find the RelationshipStarted event
+          for (const log of receipt.logs) {
+            try {
+              const decodedLog = decodeEventLog({
+                abi: LOVE_LEDGER_ABI,
+                data: log.data,
+                topics: log.topics,
+              });
+
+              if (decodedLog.eventName === "RelationshipStarted") {
+                const tokenId = (decodedLog.args as any).tokenId.toString();
+                console.log("✅ Token ID extracted:", tokenId);
+                
+                // Submit with tokenId
+                onSubmit({
+                  ...formData,
+                  tokenId,
+                });
+                return;
+              }
+            } catch (e) {
+              // Skip logs that don't match our ABI
+              continue;
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error extracting tokenId:", error);
+        }
+      }
+    };
+
+    extractTokenId();
+  }, [isSuccess, txHash, publicClient]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,9 +132,6 @@ export function CreateContract({ wallet, onBack, onSubmit }: CreateContractProps
       });
 
       console.log("✅ Transaction submitted successfully!");
-
-      // ✅ Setelah sukses kirim data ke parent
-      onSubmit(formData);
     } catch (err) {
       console.error("❌ Error creating contract:", err);
     }

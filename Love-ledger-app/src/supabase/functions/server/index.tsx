@@ -29,7 +29,7 @@ app.get("/make-server-c17b8718/health", (c) => {
 // Create a new love contract
 app.post("/make-server-c17b8718/contracts/create", async (c) => {
   try {
-    const { creatorWallet, partnerWallet, amount, duration, refundOption } = await c.req.json();
+    const { creatorWallet, partnerWallet, amount, duration, refundOption, tokenId } = await c.req.json();
     
     if (!creatorWallet || !partnerWallet || !amount) {
       return c.json({ error: "Missing required fields" }, 400);
@@ -38,12 +38,13 @@ app.post("/make-server-c17b8718/contracts/create", async (c) => {
     const contractId = `contract_${creatorWallet}_${Date.now()}`;
     const contract = {
       id: contractId,
+      tokenId: tokenId || null, // 🔥 Store NFT token ID
       creatorWallet,
       partnerWallet,
       amount,
-      duration: duration || null, // Optional: null means no expiry
+      duration: duration || null,
       refundOption,
-      status: "pending", // pending, active, verified, terminated
+      status: "Dating", // 🔥 Initial status from smart contract
       verifiedCreator: false,
       verifiedPartner: false,
       createdAt: new Date().toISOString(),
@@ -54,7 +55,7 @@ app.post("/make-server-c17b8718/contracts/create", async (c) => {
     await kv.set(contractId, contract);
     await kv.set(`wallet_${creatorWallet}`, contractId);
 
-    console.log(`Contract created: ${contractId} for ${creatorWallet}`);
+    console.log(`Contract created: ${contractId} for ${creatorWallet} with tokenId: ${tokenId}`);
     return c.json({ success: true, contract });
   } catch (error) {
     console.log(`Error creating contract: ${error}`);
@@ -77,7 +78,7 @@ app.post("/make-server-c17b8718/contracts/pair", async (c) => {
     }
 
     contract.paired = true;
-    contract.status = "active";
+    contract.status = "Dating"; // 🔥 Stays Dating until both verify
     contract.lastActivity = new Date().toISOString();
 
     await kv.set(contractId, contract);
@@ -101,8 +102,8 @@ app.post("/make-server-c17b8718/contracts/verify", async (c) => {
       return c.json({ error: "Contract not found" }, 404);
     }
 
-    if (contract.status !== "active") {
-      return c.json({ error: "Contract is not active" }, 400);
+    if (contract.status === "BrokeUp") {
+      return c.json({ error: "Contract has ended" }, 400);
     }
 
     // Update verification status based on wallet
@@ -118,14 +119,14 @@ app.post("/make-server-c17b8718/contracts/verify", async (c) => {
 
     // Check if both verified
     if (contract.verifiedCreator && contract.verifiedPartner) {
-      contract.status = "verified";
+      contract.status = "Married"; // 🔥 Both verified = Married
       contract.verifiedAt = new Date().toISOString();
       console.log(`Contract fully verified: ${contractId}`);
     }
 
     await kv.set(contractId, contract);
 
-    return c.json({ success: true, contract, bothVerified: contract.status === "verified" });
+    return c.json({ success: true, contract, bothVerified: contract.status === "Married" });
   } catch (error) {
     console.log(`Error verifying contract: ${error}`);
     return c.json({ error: "Failed to verify contract", details: String(error) }, 500);
@@ -146,7 +147,7 @@ app.post("/make-server-c17b8718/contracts/unpair", async (c) => {
       return c.json({ error: "Unauthorized wallet" }, 403);
     }
 
-    contract.status = "terminated";
+    contract.status = "BrokeUp"; // 🔥 Terminated = BrokeUp
     contract.terminatedBy = wallet;
     contract.terminatedAt = new Date().toISOString();
 
@@ -203,10 +204,10 @@ app.get("/make-server-c17b8718/stats", async (c) => {
     
     const stats = {
       totalContracts: allContracts.length,
-      activeContracts: allContracts.filter(c => c.status === "active").length,
-      verifiedContracts: allContracts.filter(c => c.status === "verified").length,
+      activeContracts: allContracts.filter(c => c.status === "Dating").length,
+      verifiedContracts: allContracts.filter(c => c.status === "Married").length,
       totalLocked: allContracts
-        .filter(c => c.status === "active")
+        .filter(c => c.status === "Dating")
         .reduce((sum, c) => sum + parseFloat(c.amount), 0),
     };
 
