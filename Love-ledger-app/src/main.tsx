@@ -38,11 +38,11 @@ const connectors = connectorsForWallets(wallets, {
 
 
 const config = createConfig({
-  chains: [liskSepolia, sepolia],
+  chains: [liskSepolia],
   connectors,
   transports: {
     [liskSepolia.id]: http(),
-    [sepolia.id]: http(),
+    // [sepolia.id]: http(),
   },
 });
 

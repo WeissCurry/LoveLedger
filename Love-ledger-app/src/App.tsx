@@ -5,28 +5,20 @@ import { WalletConnect } from "./components/WalletConnect";
 import { LandingPage } from "./components/LandingPage";
 import { CreateContract } from "./components/CreateContract";
 import { Dashboard } from "./components/Dashboard";
-import type { ContractData } from "./components/CreateContract";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
+import type { Contract } from "../src/types/Contract";
+
 
 type View = "landing" | "create" | "dashboard";
 
-interface Contract {
-  id: string;
-  creatorWallet: string;
+
+interface ContractData {
   partnerWallet: string;
   amount: string;
   duration: string;
   refundOption: string;
-  status: "pending" | "active" | "verified" | "terminated";
-  verifiedCreator: boolean;
-  verifiedPartner: boolean;
-  createdAt: string;
-  lastActivity: string;
-  paired: boolean;
-  verifiedAt?: string;
-  terminatedBy?: string;
-  terminatedAt?: string;
 }
+
 
 interface Stats {
   totalContracts: number;
@@ -120,41 +112,52 @@ export default function App() {
     }
   };
 
-  const pairWallet = async () => {
-    if (!wallet || !contract) return;
+const pairWallet = async () => {
+  if (!wallet || !contract) return;
 
-    setLoading(true);
-    try {
-      const res = await fetch(`${SERVER_URL}/contracts/pair`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({
-          contractId: contract.id,
-          partnerWallet: wallet,
-        }),
+  setLoading(true);
+  try {
+    const res = await fetch(`${SERVER_URL}/contracts/pair`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify({
+        contractId: contract.id,
+        partnerWallet: wallet,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      // 🩹 Patch manual status "active" biar dashboard langsung berubah
+      const updatedContract = {
+        ...data.contract,
+        status: "active",
+        paired: true,
+        lastActivity: new Date().toISOString(),
+      };
+
+      setContract(updatedContract);
+      setView("dashboard"); // ✅ langsung pindah ke dashboard
+      toast.success("💘 Wallets Paired!", {
+        description: "Both wallets connected — your Love Contract is now active 💞",
       });
-
-      const data = await res.json();
-      if (data.success) {
-        setContract(data.contract);
-        toast.success("💘 Wallets Paired!", {
-          description: "Both wallets connected. Commitment active.",
-        });
-        fetchStats();
-      } else {
-        toast.error("Failed to pair", {
-          description: data.error || "Please try again",
-        });
-      }
-    } catch (error) {
-      toast.error("Error pairing wallet", { description: String(error) });
-    } finally {
-      setLoading(false);
+      fetchStats();
+    } else {
+      toast.error("Failed to pair", {
+        description: data.error || "Please try again",
+      });
     }
-  };
+  } catch (error) {
+    toast.error("Error pairing wallet", { description: String(error) });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const verifyMarriage = async () => {
     if (!wallet || !contract) return;
