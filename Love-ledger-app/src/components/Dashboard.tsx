@@ -21,6 +21,8 @@ import { useContractStatus } from "../hooks/useContractStatus";
 import { useWriteContract } from "wagmi";
 import { LOVE_NFT_ADDRESS, LOVE_NFT_ABI } from "../lib/loveNftContract";
 import { useState } from "react";
+import { LOVE_FUND_VAULT_ADDRESS, LOVE_FUND_VAULT_ABI } from "../lib/loveWithdrawContract";
+import { CONTRACT_ADDRESS, LOVE_LEDGER_ABI } from "../lib/contract";
 
 interface DashboardProps {
   wallet: `0x${string}`;
@@ -35,7 +37,42 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
   const { address, isConnected } = useAccount();
 
   const [showNftCard, setShowNftCard] = useState(false);
-  
+  const { writeContract, isPending: isWithdrawing } = useWriteContract();
+
+  const handleSetMarried = async () => {
+    if (!tokenId) return;
+    try {
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: LOVE_LEDGER_ABI,
+        functionName: "setMarried",
+        args: [tokenId],
+      });
+      alert("Status set to Married!");
+    } catch (err) {
+      alert("Failed to set Married status!");
+    }
+  };
+
+  const handleWithdrawDeposit = async () => {
+    if (!tokenId || !address) return;
+    if (displayStatus !== "Dating") {
+      alert("Withdrawal only allowed when status is Dating!");
+      return;
+    }
+    try {
+      await writeContract({
+        address: LOVE_FUND_VAULT_ADDRESS,
+        abi: LOVE_FUND_VAULT_ABI,
+        functionName: "withdrawDeposit",
+        args: [tokenId, address],
+      });
+      alert("Confirm Withdraw!");
+    } catch (err) {
+      alert("Withdraw failed!");
+    }
+  };
+    
   // Get status from blockchain
   const { 
     onChainStatus, 
@@ -50,38 +87,21 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
   ? `https://rose-ideal-chimpanzee-563.mypinata.cloud/ipfs/bafybeieolzfname2vrsraw257s77mwrgs4tszcb4axx4wi6j6nlfvczawq`
   : "";
 
-  // const { writeContract, isPending: isMinting } = useWriteContract();
-
-  // const handleMintNFT = async () => {
-  //   try {
-  //     await writeContract({
-  //       address: LOVE_NFT_ADDRESS,
-  //       abi: LOVE_NFT_ABI,
-  //       functionName: "mint",
-  //       args: [address],
-  //     });
-  //     alert("You are about to mint nft!");
-  //   } catch (err) {
-  //     alert("Mint failed!");
-  //   }
-  // };
-
-
   // Use on-chain status if available, fallback to contract status
   const displayStatus = onChainStatus || contract?.status || "Dating";
 
   // 🩷 --- STATUS STYLE MAPPING SESUAI SC ---
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Dating":
-        return "bg-pink-500";
-      case "Married":
-        return "bg-yellow-400";
-      case "BrokeUp":
-        return "bg-red-500";
-      default:
-        return "bg-gray-500";
-    }
+        case "Dating":
+          return "bg-[#FF3EA5]";
+        case "Married":
+          return "bg-[#FFD700]";
+        case "BrokeUp":
+          return "bg-[#EF4444]";
+        default:
+          return "bg-[#6B7280]";
+      }
   };
 
   const getStatusIcon = (status: string) => {
@@ -218,14 +238,32 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                   <span>
                     Created: {new Date(contract.createdAt).toLocaleDateString()}
                   </span>
-                  <Button
-                    size="sm"
-                    className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
-                    onClick={() => setShowNftCard(true)}
-                    disabled={!tokenId}
-                  >
-                    View NFT
-                  </Button>
+                  <div className="flex flex-row gap-2">  
+                    <Button
+                      size="sm"
+                      className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
+                      onClick={() => setShowNftCard(true)}
+                      disabled={!tokenId}
+                    >
+                      View NFT
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FFD700] hover:bg-[#FFD700]/90"
+                      // onClick={handleWithdrawDeposit}
+                      disabled={!tokenId || isWithdrawing}
+                    >
+                      Withdraw
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
+                      onClick={handleSetMarried}
+                      disabled={!tokenId}
+                    >
+                      Set Married
+                    </Button>
+                  </div>
                 </div>
               </Card>
 
@@ -323,6 +361,7 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
 }
 
 <div className="hidden">
-  bg-pink-500 bg-yellow-400 bg-red-500 bg-gray-500
-  bg-pink-500/10 bg-pink-500/30 bg-yellow-400/20 bg-red-500/10 bg-red-500/30
+  bg-[#C2185B] hover:bg-[#C2185B]/90
+  bg-[#FFD700] hover:bg-[#FFD700]/90
+  bg-[#FFD700] hover:bg-[#FFD700]/90
 </div>
