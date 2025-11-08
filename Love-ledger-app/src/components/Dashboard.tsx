@@ -20,6 +20,7 @@ import type { Contract } from "../types/Contract";
 import { useContractStatus } from "../hooks/useContractStatus";
 import { useWriteContract } from "wagmi";
 import { LOVE_NFT_ADDRESS, LOVE_NFT_ABI } from "../lib/loveNftContract";
+import { useState } from "react";
 
 interface DashboardProps {
   wallet: `0x${string}`;
@@ -33,22 +34,7 @@ interface DashboardProps {
 export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: DashboardProps) {
   const { address, isConnected } = useAccount();
 
-  const { writeContract, isPending: isMinting } = useWriteContract();
-
-  const handleMintNFT = async () => {
-    try {
-      await writeContract({
-        address: LOVE_NFT_ADDRESS,
-        abi: LOVE_NFT_ABI,
-        functionName: "mint",
-        args: [address],
-      });
-      alert("You are about to mint nft!");
-    } catch (err) {
-      alert("Mint failed!");
-    }
-  };
-
+  const [showNftCard, setShowNftCard] = useState(false);
   
   // Get status from blockchain
   const { 
@@ -59,6 +45,27 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
     refetchStatus,
     isLoading: statusLoading 
   } = useContractStatus(contract?.partnerWallet);
+
+  const nftImageUrl = tokenId
+  ? `https://rose-ideal-chimpanzee-563.mypinata.cloud/ipfs/bafybeieolzfname2vrsraw257s77mwrgs4tszcb4axx4wi6j6nlfvczawq`
+  : "";
+
+  // const { writeContract, isPending: isMinting } = useWriteContract();
+
+  // const handleMintNFT = async () => {
+  //   try {
+  //     await writeContract({
+  //       address: LOVE_NFT_ADDRESS,
+  //       abi: LOVE_NFT_ABI,
+  //       functionName: "mint",
+  //       args: [address],
+  //     });
+  //     alert("You are about to mint nft!");
+  //   } catch (err) {
+  //     alert("Mint failed!");
+  //   }
+  // };
+
 
   // Use on-chain status if available, fallback to contract status
   const displayStatus = onChainStatus || contract?.status || "Dating";
@@ -214,13 +221,63 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                   <Button
                     size="sm"
                     className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
-                    onClick={handleMintNFT}
-                    disabled={isMinting}
+                    onClick={() => setShowNftCard(true)}
+                    disabled={!tokenId}
                   >
-                    Mint NFT
+                    View NFT
                   </Button>
                 </div>
               </Card>
+
+              {/* NFT Card Modal */}
+              {showNftCard && tokenId != null && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-12">
+                  <Card style={{ maxWidth: "400px" }} className="max-w-xs w-full p-6 bg-[#1A1332] border-[#FF3EA5]/40 relative">
+                    <Button
+                      variant="ghost"
+                      className="absolute top-2 right-2 text-gray-400"
+                      onClick={() => setShowNftCard(false)}
+                      style={{ zIndex: 10 }}
+                    >
+                      <XCircle className="w-5 h-5" />
+                    </Button>
+                    <h2 className="text-xl font-bold text-[#FF3EA5] mb-4 text-center">Your Love NFT</h2>
+                    {nftImageUrl ? (
+                      <img
+                        src={nftImageUrl}
+                        alt={`NFT #${tokenId.toString()}`}
+                        className="rounded-lg mx-auto mb-4 max-h-64"
+                        style={{ maxWidth: "300px", maxHeight: "300px", width: "100%", height: "auto" }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://placehold.co/300x300?text=NFT+Not+Found";
+                        }}
+                      />
+                    ) : (
+                      <div className="text-gray-400 text-center mb-4">NFT image not available.</div>
+                    )}
+                    <div className="text-center text-xs text-gray-400">
+                      Token ID: {tokenId?.toString()}
+                      <br />
+                      Contract: <span className="break-all">{LOVE_NFT_ADDRESS}</span>
+                    </div>
+                    <div className="mt-4 flex justify-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          window.open(
+                            `https://sepolia-blockscout.lisk.com/token/${LOVE_NFT_ADDRESS}/instance/${tokenId?.toString()}`,
+                            "_blank"
+                          )
+                        }
+                      >
+                        View on Explorer
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              )}
 
               {/* STATUS DETAIL */}
               {displayStatus === "Dating" && (
