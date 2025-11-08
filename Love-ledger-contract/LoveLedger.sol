@@ -1,118 +1,197 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
-import "./LoveFundVault.sol";
-import "./LoveNFT.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract LoveLedger {
-    struct LoveContract {
-        address creator;
-        address partner;
-        uint256 amount;
-        bool refundOption; // true = refund, false = burn
-        bool verifiedCreator;
-        bool verifiedPartner;
-        bool active;
-        bool terminated;
-        uint256 createdAt;
+contract LoveLedger is ERC721, Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    enum Status { Dating, BrokeUp, Married }
+
+    struct Deposit {
+        address depositor;      // who funded the deposit
+        address token;          // address(0) = ETH, else ERC20 token address
+        uint256 amount;         // amount deposited
+        bool withdrawn;         // whether deposit was withdrawn
     }
 
-    address payable public constant VAULT_ADDRESS = payable(0x089AF4D3Ff5ec4275cbdFcaf9a56DAdae8842691);
-    address public constant NFT_ADDRESS   = 0xECB41F6403B96e315708e5e7757f0d9330157D33;
-
-    LoveFundVault public vault;
-    LoveNFT public nft;
-
-    address public burnAddress = address(0xdead);
-    uint256 public contractCount;
-
-    mapping(uint256 => LoveContract) public loveContracts;
-
-    event ContractCreated(uint256 contractId, address creator, address partner, uint256 amount);
-    event WalletPaired(uint256 contractId);
-    event MarriageVerified(uint256 contractId);
-    event ContractTerminated(uint256 contractId, address terminatedBy);
-
-    constructor() {
-        vault = LoveFundVault(VAULT_ADDRESS);
-        nft = LoveNFT(NFT_ADDRESS);
+    struct Relationship {
+        address partnerA;       // minter
+        address partnerB;       // invited partner
+        Status status;          // current relationship status
+        uint64  startedAt;      // timestamp
+        bool    locked;         // hard lock once broke up to prevent status flip-flops
     }
 
-    // 🔹 Create contract
-    function createLoveContract(address _partner, bool _refundOption) external payable {
-        require(msg.value > 0, "No ETH sent");
-        require(_partner != address(0), "Invalid partner");
+    // address => partner address (0 if single / not in active relationship)
+    mapping(address => address) public partnerOf;
 
-        contractCount++;
-        loveContracts[contractCount] = LoveContract({
-            creator: msg.sender,
-            partner: _partner,
-            amount: msg.value,
-            refundOption: _refundOption,
-            verifiedCreator: false,
-            verifiedPartner: false,
-            active: false,
-            terminated: false,
-            createdAt: block.timestamp
+    // tokenId => relationship data
+    mapping(uint256 => Relationship) public relationships;
+
+    // tokenId => deposit data (single deposit by minter at start)
+    mapping(uint256 => Deposit) public deposits;
+
+    // Optional: per-token(min currency) minimums; default 0 means no minimum
+    mapping(address => uint256) public minDeposit; // key: token (address(0) for ETH)
+
+    uint256 private _nextId = 1;
+
+    event RelationshipStarted(
+        uint256 indexed tokenId,
+        address indexed partnerA,
+        address indexed partnerB,
+        address depositToken,
+        uint256 depositAmount
+    );
+
+    event StatusUpdated(uint256 indexed tokenId, Status status);
+    event DepositWithdrawn(uint256 indexed tokenId, address to, address token, uint256 amount);
+
+    constructor() ERC721("LoveLedger", "LOVE") Ownable(msg.sender) {}
+
+    // Admin can set minimum required deposit for a given currency (ETH=address(0))
+    function setMinDeposit(address token, uint256 amount) external onlyOwner {
+        minDeposit[token] = amount;
+    }
+
+    /// @notice Start a relationship and mint the LOVE NFT to msg.sender.
+    /// @param partner The partner address to pair with.
+    /// @param depositToken address(0) for ETH, or ERC20 address for token deposits.
+    /// @param depositAmount For ERC20 deposits, the amount to transferFrom. Ignored for ETH.
+    function startRelationship(
+        address partner,
+        address depositToken,
+        uint256 depositAmount
+    ) external payable nonReentrant returns (uint256 tokenId) {
+        require(partner != address(0), "Partner required");
+        require(partner != msg.sender, "Can't date yourself :)");
+        require(partnerOf[msg.sender] == address(0), "You are already in a relationship");
+        require(partnerOf[partner] == address(0), "Partner is already in a relationship");
+
+        // Handle deposit logic
+        if (depositToken == address(0)) {
+            // ETH path
+            require(msg.value >= minDeposit[address(0)], "ETH below minimum");
+            depositAmount = msg.value;
+        } else {
+            // ERC20 path
+            require(msg.value == 0, "Don't send ETH with ERC20");
+            require(depositAmount >= minDeposit[depositToken], "ERC20 below minimum");
+            IERC20(depositToken).safeTransferFrom(msg.sender, address(this), depositAmount);
+        }
+
+        tokenId = _nextId++;
+        _safeMint(msg.sender, tokenId);
+
+        relationships[tokenId] = Relationship({
+            partnerA: msg.sender,
+            partnerB: partner,
+            status: Status.Dating,
+            startedAt: uint64(block.timestamp),
+            locked: false
         });
 
-        vault.deposit{value: msg.value}(contractCount);
-        emit ContractCreated(contractCount, msg.sender, _partner, msg.value);
+        deposits[tokenId] = Deposit({
+            depositor: msg.sender,
+            token: depositToken,
+            amount: depositAmount,
+            withdrawn: false
+        });
+
+        // set partner mapping (both directions)
+        partnerOf[msg.sender] = partner;
+        partnerOf[partner] = msg.sender;
+
+        emit RelationshipStarted(tokenId, msg.sender, partner, depositToken, depositAmount);
+        emit StatusUpdated(tokenId, Status.Dating);
     }
 
-    // 🔹 Pair partner
-    function pairWallet(uint256 _id) external {
-        LoveContract storage c = loveContracts[_id];
-        require(msg.sender == c.partner, "Not partner");
-        require(!c.active, "Already active");
-        require(!c.terminated, "Contract terminated");
-
-        c.active = true;
-        emit WalletPaired(_id);
+    /// @notice Mark relationship as Married (only one of the partners can call).
+    function setMarried(uint256 tokenId) external {
+        Relationship storage rel = relationships[tokenId];
+        _requireIsPartner(tokenId, msg.sender);
+        require(!rel.locked, "Relationship locked");
+        require(rel.status == Status.Dating, "Not in Dating state");
+        rel.status = Status.Married;
+        emit StatusUpdated(tokenId, Status.Married);
+        // mapping remains since still partners
     }
 
-    // 🔹 Verify marriage
-    function verifyMarriage(uint256 _id) external {
-        LoveContract storage c = loveContracts[_id];
-        require(c.active, "Inactive");
-        require(!c.terminated, "Terminated");
+    /// @notice Mark relationship as BrokeUp (only one of the partners can call).
+    /// Irreversible; also clears partner mapping.
+    function setBrokeUp(uint256 tokenId) external {
+        Relationship storage rel = relationships[tokenId];
+        _requireIsPartner(tokenId, msg.sender);
+        require(rel.status != Status.BrokeUp, "Already BrokeUp");
+        // Once broke up, lock to prevent toggling back to Married
+        rel.status = Status.BrokeUp;
+        rel.locked = true;
+        emit StatusUpdated(tokenId, Status.BrokeUp);
 
-        if (msg.sender == c.creator) c.verifiedCreator = true;
-        if (msg.sender == c.partner) c.verifiedPartner = true;
-
-        if (c.verifiedCreator && c.verifiedPartner) {
-            _finalizeMarriage(_id);
-        }
+        // clear partner mapping for both if still pointing to each other
+        if (partnerOf[rel.partnerA] == rel.partnerB) partnerOf[rel.partnerA] = address(0);
+        if (partnerOf[rel.partnerB] == rel.partnerA) partnerOf[rel.partnerB] = address(0);
     }
 
-    function _finalizeMarriage(uint256 _id) internal {
-        LoveContract storage c = loveContracts[_id];
-        vault.releaseFunds(c.creator, c.partner, c.amount);
-        nft.mint(c.creator);
-        nft.mint(c.partner);
-        c.active = false;
-        emit MarriageVerified(_id);
-    }
+    /// @notice Withdraw initial deposit if and only if status is Married.
+    /// Only the original depositor may withdraw, and only once.
+    function withdrawDeposit(uint256 tokenId, address to) external nonReentrant {
+        Relationship storage rel = relationships[tokenId];
+        Deposit storage dep = deposits[tokenId];
 
-    // 🔹 Unpair / terminate
-    function unpair(uint256 _id) external {
-        LoveContract storage c = loveContracts[_id];
-        require(c.active, "Inactive");
-        require(!c.terminated, "Already terminated");
-        require(msg.sender == c.creator || msg.sender == c.partner, "Not participant");
+        require(dep.depositor == msg.sender, "Only depositor");
+        require(!dep.withdrawn, "Already withdrawn");
+        require(rel.status == Status.Married, "Not allowed unless Married");
+        require(to != address(0), "Bad recipient");
 
-        c.terminated = true;
-        c.active = false;
+        dep.withdrawn = true;
 
-        if (c.refundOption) {
-            // Refund all to remaining partner
-            address receiver = msg.sender == c.creator ? c.partner : c.creator;
-            vault.refund(receiver, c.amount);
+        if (dep.token == address(0)) {
+            (bool ok, ) = to.call{value: dep.amount}("");
+            require(ok, "ETH transfer failed");
         } else {
-            // Burn funds
-            vault.burnFunds(c.amount, burnAddress);
+            IERC20(dep.token).safeTransfer(to, dep.amount);
         }
 
-        emit ContractTerminated(_id, msg.sender);
+        emit DepositWithdrawn(tokenId, to, dep.token, dep.amount);
+    }
+
+    /// ----- View helpers -----
+    function isPartner(address a, address b) external view returns (bool) {
+        return partnerOf[a] == b && partnerOf[b] == a;
+    }
+
+    function getStatus(uint256 tokenId) external view returns (Status) {
+        return relationships[tokenId].status;
+    }
+
+    function partnersOfToken(uint256 tokenId) external view returns (address, address) {
+        Relationship storage r = relationships[tokenId];
+        return (r.partnerA, r.partnerB);
+    }
+
+    /// ----- Internal helpers -----
+    function _requireIsPartner(uint256 tokenId, address caller) internal view {
+        Relationship storage r = relationships[tokenId];
+        require(
+            caller == r.partnerA || caller == r.partnerB,
+            "Not a relationship partner"
+        );
+    }
+
+    /// @notice Optional: baseURI for token metadata
+    string private _baseTokenURI;
+
+    function setBaseURI(string memory newBase) external onlyOwner {
+        _baseTokenURI = newBase;
+    }
+
+    function _baseURI() internal view override returns (string memory) {
+        return _baseTokenURI;
     }
 }

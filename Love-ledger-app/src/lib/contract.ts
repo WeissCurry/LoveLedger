@@ -3,7 +3,7 @@ import { sepolia } from "viem/chains";
 import ABI from "../abi/LoveLedgerABI.json";
 import { defineChain } from "viem/utils";
 
-export const CONTRACT_ADDRESS = "0x3cc95BdCbefbe2b335Ad7D1679D8eCD69df93D18";
+export const CONTRACT_ADDRESS = "0xd68d1f3bA6b55519317A8B6F62398B108ca78FD5";
 
 
 const liskSepolia = defineChain({
