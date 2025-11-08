@@ -21,8 +21,8 @@ import { useContractStatus } from "../hooks/useContractStatus";
 import { useWriteContract } from "wagmi";
 import { LOVE_NFT_ADDRESS, LOVE_NFT_ABI } from "../lib/loveNftContract";
 import { useState } from "react";
-import { LOVE_FUND_VAULT_ADDRESS, LOVE_FUND_VAULT_ABI } from "../lib/loveWithdrawContract";
 import { CONTRACT_ADDRESS, LOVE_LEDGER_ABI } from "../lib/contract";
+// import { LOVE_FUND_VAULT_ADDRESS, LOVE_FUND_VAULT_ABI } from "../lib/loveWithdrawContract"; // Tidak terpakai
 
 interface DashboardProps {
   wallet: `0x${string}`;
@@ -37,10 +37,18 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
   const { address, isConnected } = useAccount();
 
   const [showNftCard, setShowNftCard] = useState(false);
-  const { writeContract, isPending: isWithdrawing } = useWriteContract();
+  // --- 1. Ganti Nama Loading State ---
+  const { writeContract, isPending: isWriting } = useWriteContract();
 
   const handleSetMarried = async () => {
     if (!tokenId) return;
+
+    // --- 3. Tambahkan Cek Logika ---
+    if (displayStatus !== "Dating") {
+      alert("Can only marry if status is currently Dating!");
+      return;
+    }
+
     try {
       await writeContract({
         address: CONTRACT_ADDRESS,
@@ -48,31 +56,60 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
         functionName: "setMarried",
         args: [tokenId],
       });
-      alert("Status set to Married!");
+      alert("Status set to Brokup!");
+      refetchStatus(); // Refresh status
     } catch (err) {
-      alert("Failed to set Married status!");
+      alert("Failed to set Brokup status!");
     }
   };
 
   const handleWithdrawDeposit = async () => {
     if (!tokenId || !address) return;
-    if (displayStatus !== "Dating") {
-      alert("Withdrawal only allowed when status is Dating!");
+    
+    if (displayStatus !== "Married") {
+      alert("Withdrawal is only allowed when status is Married!");
       return;
     }
+
     try {
       await writeContract({
-        address: LOVE_FUND_VAULT_ADDRESS,
-        abi: LOVE_FUND_VAULT_ABI,
+        address: CONTRACT_ADDRESS,
+        abi: LOVE_LEDGER_ABI,
         functionName: "withdrawDeposit",
         args: [tokenId, address],
       });
-      alert("Confirm Withdraw!");
+      alert("Withdrawal successful! Check your wallet.");
+      refetchStatus(); // Refresh status
     } catch (err) {
+      console.error(err);
       alert("Withdraw failed!");
     }
   };
     
+  // --- 2. Tambahkan Fungsi handleSetBrokeUp ---
+  const handleSetBrokeUp = async () => {
+    if (!tokenId) return;
+    
+    if (displayStatus !== "Dating") {
+      alert("Can only break up if status is currently Dating!");
+      return;
+    }
+
+    try {
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: LOVE_LEDGER_ABI,
+        functionName: "setBrokeUp",
+        args: [tokenId],
+      });
+      alert("Status updated to Married!");
+      refetchStatus(); // Refresh status
+    } catch (err) {
+      console.error(err);
+      alert("Failed to set Married status!");
+    }
+  };
+
   // Get status from blockchain
   const { 
     onChainStatus, 
@@ -229,7 +266,7 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                     <div className="text-sm text-gray-400 mb-1">Partner B</div>
                     <div className="text-sm">
                       {contract.partnerWallet.slice(0, 10)}...{contract.partnerWallet.slice(-8)}
-                      {isPartner && <span className="text-[#FF3EA5] ml-2">(You)</span>}
+{isPartner && <span className="text-[#FF3EA5] ml-2">(You)</span>}
                     </div>
                   </div>
                 </div>
@@ -238,30 +275,43 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                   <span>
                     Created: {new Date(contract.createdAt).toLocaleDateString()}
                   </span>
-                  <div className="flex flex-row gap-2">  
+                  
+                  {/* --- 4. Perbarui Grup Tombol (Button) --- */}
+                  <div className="flex flex-row gap-2">
                     <Button
                       size="sm"
                       className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
                       onClick={() => setShowNftCard(true)}
-                      disabled={!tokenId}
+                      disabled={!tokenId || isWriting} // Tambahkan isWriting
                     >
                       View NFT
                     </Button>
+                    
                     <Button
                       size="sm"
-                      className="bg-[#FFD700] hover:bg-[#FFD700]/90"
-                      // onClick={handleWithdrawDeposit}
-                      disabled={!tokenId || isWithdrawing}
+                      className="bg-[#FFD700] hover:bg-[#FFD700]/90 disabled:opacity-50"
+                      onClick={handleWithdrawDeposit}
+                      disabled={!tokenId || isWriting || displayStatus !== "Married"} // Logika disabled lengkap
                     >
-                      Withdraw
+                      {isWriting ? "Confirm..." : "Withdraw"}
                     </Button>
+                    
                     <Button
                       size="sm"
-                      className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90"
+                      className="bg-[#FF3EA5] hover:bg-[#FF3EA5]/90 disabled:opacity-50"
                       onClick={handleSetMarried}
-                      disabled={!tokenId}
+                      disabled={!tokenId || isWriting || displayStatus !== "Dating"} // Logika disabled lengkap
                     >
-                      Set Married
+                      {isWriting ? "Confirm..." : "Broke Up"}
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      className="bg-red-500 hover:bg-red-500/90 disabled:opacity-50"
+                      onClick={handleSetBrokeUp}
+                      disabled={!tokenId || isWriting || displayStatus !== "Dating"} // Logika disabled lengkap
+                    >
+                      {isWriting ? "Confirm..." : "Set Married"}
                     </Button>
                   </div>
                 </div>
@@ -322,7 +372,7 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
                 <Alert className="bg-pink-500/10 border-pink-500/30">
                   <Heart className="h-4 w-4 text-pink-400" />
                   <AlertDescription className="text-sm text-gray-300">
-                    💞 You're currently dating! Ready to take it to the next level?
+                    💞 You're currently dating! Ready to take it to the next level? Or... not?
                   </AlertDescription>
                 </Alert>
               )}
@@ -364,4 +414,5 @@ export function Dashboard({ contract, onBack, onPair, onVerify, onUnpair }: Dash
   bg-[#C2185B] hover:bg-[#C2185B]/90
   bg-[#FFD700] hover:bg-[#FFD700]/90
   bg-[#FFD700] hover:bg-[#FFD700]/90
+  bg-red-500 hover:bg-red-500/90 
 </div>
